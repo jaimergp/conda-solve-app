@@ -44,13 +44,17 @@ def _platform():
 
 @st.cache_resource
 def micromamba():
-    micromamba_path = Path(sys.prefix, "bin", "micromamba")
+    micromamba_path = Path(__file__).parent / "micromamba"
     if micromamba_path.is_file():
         return micromamba_path
     url = f"https://conda.anaconda.org/conda-forge/{_platform()}/micromamba-1.5.1-0.tar.bz2"
     tarball, _ = urlretrieve(url)
     with tarfile.open(tarball, "r:bz2") as tf:
-        tf.extract("bin/micromamba", path=sys.prefix)
+        for item in tf:
+            if item.name == "bin/micromamba":
+                item.name = "micromamba"
+                tf.extract(item, path=Path(__file__).parent)
+                break
     os.chmod(str(micromamba_path), 0o755)
     return micromamba_path
 
