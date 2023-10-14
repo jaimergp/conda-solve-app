@@ -237,12 +237,12 @@ st.title(f":snake: {TITLE}", anchor="top")
 with st.sidebar:
     st.sidebar.title("Options")
     platform = st.selectbox(
-        "Platform",
+        "Platform *",
         ["linux-64", "linux-aarch64", "linux-ppc64le", "osx-64", "osx-arm64", "win-64"],
     )
-    channels = st.multiselect("Channels", ALLOWED_CHANNELS, placeholder="conda-forge")
+    channels = st.multiselect("Channels *", ALLOWED_CHANNELS, placeholder="Pick at least one")
     packages = st.text_area(
-        "Packages",
+        "Packages *",
         help=f"Specify up to {MAX_LINES_PER_REQUEST} packages, one per line.",
         placeholder="python=3\nnumpy>=1.18.1=*py38*\nscipy[build=*py38*]",
         max_chars=MAX_CHARS_PER_LINE * MAX_LINES_PER_REQUEST,
@@ -263,12 +263,13 @@ with st.sidebar:
         elif platform.startswith("win"):
             virtual_packages["win"] = st.text_input("`__win`", "1", disabled=True)
             virtual_packages["cuda"] = st.text_input("`__cuda`", "11.0", max_chars=10)
+    
+    specs = list(validate_packages(packages.splitlines()))
+    enabled = all([platform, channels, specs])
+    ok = st.sidebar.button("Run solve", disabled=not enabled)
 
-    ok = st.sidebar.button("Run solve")
-
-if ok or (packages and channels and platform):
+if ok or enabled:
     try:
-        specs = list(validate_packages(packages.splitlines()))
         result = solve(
             sorted(specs),
             channels=channels,
@@ -304,3 +305,8 @@ if ok or (packages and channels and platform):
         st.error("Unknown error. Check the full JSON result below.")
     with st.expander("Full JSON result"):
         st.code(json.dumps(result, indent=2), language="json")
+else:
+    st.info(
+        "Use the left sidebar to specify your input. "
+        "Fields marked with * are required."
+    )
