@@ -22,6 +22,7 @@ ALLOWED_PLATFORMS = [
     "osx-arm64",
     "win-64",
 ]
+ALLOWED_PRIORITIES = ["strict", "flexible", "disabled"]
 TTL = 3600  # seconds
 REPODATA_TIMEOUT = 60  # seconds
 SOLVE_TIMEOUT = 30  # seconds
@@ -291,10 +292,10 @@ def parse_url_params():
                     f"Use one of: {', '.join(ALLOWED_PLATFORMS)}."
                 )
                 continue
-            elif key == "priority" and value not in ("strict", "flexible", "disabled"):
+            elif key == "priority" and value not in ALLOWED_PRIORITIES:
                 st.error(
                     f"Invalid channel priority `{value}`. "
-                    f"Use one of: `strict`, `flexible`, `disabled`."
+                    f"Use one of: {', '.join(ALLOWED_PRIORITIES)}."
                 )
                 continue
             elif key in ("glibc", "cuda", "osx") and not re.match(r"^[0-9\.]+$", value):
@@ -315,13 +316,15 @@ def initialize_state():
     if invalid:
         st.error(f"Invalid URL params: `{', '.join(invalid)}`")
         return True
-    elif "platform" not in st.session_state:
-        # Initialize state from URL params, only on first run
-        # These state keys match the sidebar widgets keys below
-        for key in STATEFUL_KEYS:
-            value = parsed_url_params.get(key) or DEFAULT_STATE.get(key)
-            if value:
-                setattr(st.session_state, key, value)
+
+    # Initialize state from URL params, only on first run
+    # These state keys match the sidebar widgets keys below
+    for key in STATEFUL_KEYS:
+        if key in st.session_state:
+            continue  # only define once per session
+        value = parsed_url_params.get(key) or DEFAULT_STATE.get(key)
+        if value:
+            setattr(st.session_state, key, value)
 
 
 # ---
@@ -352,23 +355,21 @@ with st.sidebar:
     )
     with st.expander("Advanced"):
         priority = st.selectbox(
-            "Channel priority", ["strict", "flexible", "disabled"], key="priority"
+            "Channel priority", ALLOWED_PRIORITIES, key="priority"
         )
         virtual_packages = {}
-        if platform.startswith("linux"):
+        if platform.startswith("linux-"):
             virtual_packages["linux"] = st.text_input("`__linux`", "1", disabled=True)
             virtual_packages["glibc"] = st.text_input(
-                "`__glibc`", max_chars=10, key="glibc"
+                "`__glibc`", DEFAULT_STATE["glibc"], max_chars=10, key="glibc"
             )
-            virtual_packages["cuda"] = st.text_input(
-                "`__cuda`", max_chars=10, key="cuda"
-            )
-        elif platform.startswith("osx"):
-            virtual_packages["osx"] = st.text_input("`__osx`", max_chars=10, key="osx")
-        elif platform.startswith("win"):
+        elif platform.startswith("osx-"):
+            virtual_packages["osx"] = st.text_input("`__osx`", DEFAULT_STATE["osx"], max_chars=10, key="osx")
+        elif platform.startswith("win-"):
             virtual_packages["win"] = st.text_input("`__win`", "1", disabled=True)
+        elif platform.startswith(("linux-", "win-")):
             virtual_packages["cuda"] = st.text_input(
-                "`__cuda`", max_chars=10, key="cuda"
+                "`__cuda`", DEFAULT_STATE["cuda"], max_chars=10, key="cuda"
             )
 
     specs = list(validate_packages(packages.splitlines()))
