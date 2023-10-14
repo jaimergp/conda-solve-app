@@ -1,0 +1,10 @@
+name: conda-solve-app
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - micromamba=1.5
+  - pip:
+    - streamlit
+  

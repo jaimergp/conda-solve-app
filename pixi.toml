@@ -1,0 +1,15 @@
+[project]
+name = "conda-solve-app"
+version = "0.1.0"
+description = "A Streamlit app to solve conda environments"
+authors = ["jaimergp <jaimergp@users.noreply.github.com>"]
+channels = ["conda-forge"]
+platforms = ["osx-arm64"]
+
+[tasks]
+dev = "streamlit run --server.runOnSave=true app.py"
+deploy = "streamlit run --server.headless=true --global.developmentMode=false app.py"
+
+[dependencies]
+streamlit = "1.27.2.*"
+micromamba = "1.5.1.*"
