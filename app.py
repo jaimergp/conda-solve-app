@@ -14,11 +14,28 @@ import streamlit as st
 
 TITLE = "Online solver for conda packages"
 ALLOWED_CHANNELS = ["conda-forge", "bioconda", "defaults"]
+ALLOWED_PLATFORMS = [
+    "linux-64",
+    "linux-aarch64",
+    "linux-ppc64le",
+    "osx-64",
+    "osx-arm64",
+    "win-64",
+]
 TTL = 3600  # seconds
 REPODATA_TIMEOUT = 60  # seconds
 SOLVE_TIMEOUT = 30  # seconds
 MAX_CHARS_PER_LINE = 50
 MAX_LINES_PER_REQUEST = 25
+
+STATEFUL_KEYS = ("platform", "channels", "packages", "priority", "glibc", "cuda", "osx")
+DEFAULT_STATE = {
+    "platform": "linux-64",
+    "priority": "strict",
+    "glibc": "2.12",
+    "cuda": "11",
+    "osx": "10.9",
+}
 
 st.set_page_config(
     page_title=TITLE,
@@ -250,49 +267,122 @@ def validate_packages(packages):
             yield pkg
 
 
+def parse_url_params():
+    parsed = {}
+    url_params = st.experimental_get_query_params()
+    for key in STATEFUL_KEYS:
+        value = url_params.get(key, [None])[0]
+        if value:
+            if key == "channels":
+                value = list(dict.fromkeys(value.split(",")))
+                bad_channel = False
+                for channel in value:
+                    if channel not in ALLOWED_CHANNELS:
+                        st.error(
+                            f"Invalid channel `{channel}`. "
+                            f"Use one of: {', '.join(ALLOWED_CHANNELS)}."
+                        )
+                        bad_channel = True
+                if bad_channel:
+                    continue
+            elif key == "platform" and value not in ALLOWED_PLATFORMS:
+                st.error(
+                    f"Invalid platform `{value}`. "
+                    f"Use one of: {', '.join(ALLOWED_PLATFORMS)}."
+                )
+                continue
+            elif key == "priority" and value not in ("strict", "flexible", "disabled"):
+                st.error(
+                    f"Invalid channel priority `{value}`. "
+                    f"Use one of: `strict`, `flexible`, `disabled`."
+                )
+                continue
+            elif key in ("glibc", "cuda", "osx") and not re.match(r"^[0-9\.]+$", value):
+                st.error(f"Invalid value for `{key}`: `{value}`")
+                continue
+            elif key == "packages" and len(value.splitlines()) > MAX_LINES_PER_REQUEST:
+                st.error(
+                    f"Too many packages requested. Maximum is {MAX_LINES_PER_REQUEST}."
+                )
+                continue
+            parsed[key] = value
+            url_params.pop(key)
+    return parsed, url_params
+
+
+def initialize_state():
+    parsed_url_params, invalid = parse_url_params()
+    if invalid:
+        st.error(f"Invalid URL params: `{', '.join(invalid)}`")
+        return True
+    elif "platform" not in st.session_state:
+        # Initialize state from URL params, only on first run
+        # These state keys match the sidebar widgets keys below
+        for key in STATEFUL_KEYS:
+            value = parsed_url_params.get(key) or DEFAULT_STATE.get(key)
+            if value:
+                setattr(st.session_state, key, value)
+
+
 # ---
-# Streamlit app
+# Streamlit app starts here
 
-
+initialization_error = initialize_state()
 st.title(f":snake: {TITLE}", anchor="top")
 
 with st.sidebar:
     st.sidebar.title("Options")
     platform = st.selectbox(
         "Platform *",
-        ["linux-64", "linux-aarch64", "linux-ppc64le", "osx-64", "osx-arm64", "win-64"],
+        ALLOWED_PLATFORMS,
+        key="platform",
     )
     channels = st.multiselect(
-        "Channels *", ALLOWED_CHANNELS, placeholder="Pick at least one"
+        "Channels *",
+        ALLOWED_CHANNELS,
+        placeholder="Pick at least one",
+        key="channels",
     )
     packages = st.text_area(
         "Packages *",
         help=f"Specify up to {MAX_LINES_PER_REQUEST} packages, one per line.",
         placeholder="python=3\nnumpy>=1.18.1=*py38*\nscipy[build=*py38*]",
         max_chars=MAX_CHARS_PER_LINE * MAX_LINES_PER_REQUEST,
+        key="packages",
     )
     with st.expander("Advanced"):
-        priority = st.selectbox("Channel priority", ["strict", "flexible", "disabled"])
+        priority = st.selectbox(
+            "Channel priority", ["strict", "flexible", "disabled"], key="priority"
+        )
         virtual_packages = {}
         if platform.startswith("linux"):
             virtual_packages["linux"] = st.text_input("`__linux`", "1", disabled=True)
             virtual_packages["glibc"] = st.text_input(
-                "`__glibc`",
-                "2.12",
-                max_chars=10,
+                "`__glibc`", max_chars=10, key="glibc"
             )
-            virtual_packages["cuda"] = st.text_input("`__cuda`", "11.0", max_chars=10)
+            virtual_packages["cuda"] = st.text_input(
+                "`__cuda`", max_chars=10, key="cuda"
+            )
         elif platform.startswith("osx"):
-            virtual_packages["osx"] = st.text_input("`__osx`", "10.9", max_chars=10)
+            virtual_packages["osx"] = st.text_input("`__osx`", max_chars=10, key="osx")
         elif platform.startswith("win"):
             virtual_packages["win"] = st.text_input("`__win`", "1", disabled=True)
-            virtual_packages["cuda"] = st.text_input("`__cuda`", "11.0", max_chars=10)
+            virtual_packages["cuda"] = st.text_input(
+                "`__cuda`", max_chars=10, key="cuda"
+            )
 
     specs = list(validate_packages(packages.splitlines()))
     enabled = all([platform, channels, specs])
     ok = st.sidebar.button("Run solve", disabled=not enabled)
 
 if ok or enabled:
+    st.experimental_set_query_params(
+        platform=platform,
+        channels=",".join(channels),
+        packages="\n".join(specs),
+        priority=priority,
+        **{k: v for k, v in virtual_packages.items() if v and k in STATEFUL_KEYS},
+    )
     try:
         result = solve(
             sorted(specs),
@@ -330,7 +420,10 @@ if ok or enabled:
         st.error("Unknown error. Check the full JSON result below.")
     with st.expander("Full JSON result"):
         st.code(json.dumps(result, indent=2), language="json")
+elif initialization_error:
+    st.info("There were errors initializing the app. Check your URL.")
 else:
+    st.experimental_set_query_params()
     st.info(
         "Use the left sidebar to specify your input. "
         "Fields marked with * are required."
