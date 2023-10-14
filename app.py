@@ -96,7 +96,6 @@ def solve(
         micromamba(),
         "create",
         "--dry-run",
-        "--json",
         "--name",
         "test",
         "--repodata-ttl",
@@ -115,19 +114,42 @@ def solve(
         if v:
             env["CONDA_OVERRIDE_" + k.upper()] = v
 
-    p = run(cmd, capture_output=True, text=True, timeout=SOLVE_TIMEOUT, env=env)
+    p = run(
+        [*cmd, "--json"], capture_output=True, text=True, timeout=SOLVE_TIMEOUT, env=env
+    )
     try:
-        return json.loads(p.stdout)
+        result = json.loads(p.stdout)
     except json.JSONDecodeError:
-        pass
-    return {
-        "success": False,
-        "stdout": p.stdout,
-        "stderr": p.stderr,
-        "returncode": p.returncode,
-        "cmd": cmd,
-        "virtual_packages": virtual_packages or {},
-    }
+        return {
+            "success": False,
+            "stdout": p.stdout,
+            "stderr": p.stderr,
+            "returncode": p.returncode,
+            "cmd": cmd,
+            "virtual_packages": virtual_packages or {},
+        }
+    if result.get("solver_problems"):
+        # augment with explained problems, not available in JSON output :shrug:
+        p = run(
+            [*cmd, "--quiet"],
+            capture_output=True,
+            text=True,
+            timeout=SOLVE_TIMEOUT,
+            env=env,
+        )
+        error_lines = None
+        for line in p.stderr.splitlines():
+            line = line.rstrip()
+            if "Could not solve for environment specs" in line:
+                if error_lines is None:
+                    error_lines = []
+                    continue
+                break
+            if error_lines is not None:
+                error_lines.append(line)
+        result["explained_problems"] = "\n".join(error_lines)
+        return result
+    return result
 
 
 def _readable_size(num, suffix="B"):
@@ -240,7 +262,9 @@ with st.sidebar:
         "Platform *",
         ["linux-64", "linux-aarch64", "linux-ppc64le", "osx-64", "osx-arm64", "win-64"],
     )
-    channels = st.multiselect("Channels *", ALLOWED_CHANNELS, placeholder="Pick at least one")
+    channels = st.multiselect(
+        "Channels *", ALLOWED_CHANNELS, placeholder="Pick at least one"
+    )
     packages = st.text_area(
         "Packages *",
         help=f"Specify up to {MAX_LINES_PER_REQUEST} packages, one per line.",
@@ -263,7 +287,7 @@ with st.sidebar:
         elif platform.startswith("win"):
             virtual_packages["win"] = st.text_input("`__win`", "1", disabled=True)
             virtual_packages["cuda"] = st.text_input("`__cuda`", "11.0", max_chars=10)
-    
+
     specs = list(validate_packages(packages.splitlines()))
     enabled = all([platform, channels, specs])
     ok = st.sidebar.button("Run solve", disabled=not enabled)
@@ -298,9 +322,10 @@ if ok or enabled:
         with st.expander("Lockfile"):
             st.code(lockfile(records, platform), language="text")
     elif problems := result.get("solver_problems"):
-        st.markdown("### Solver found conflicts")
-        for problem in problems:
-            st.error(f"`{problem}`")
+        st.error("Solver could not find a solution!")
+        st.code("\n".join(problems), language="text")
+        if explained := result.get("explained_problems"):
+            st.code(explained, language="text")
     else:
         st.error("Unknown error. Check the full JSON result below.")
     with st.expander("Full JSON result"):
