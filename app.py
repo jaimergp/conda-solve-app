@@ -47,7 +47,7 @@ def micromamba():
     micromamba_path = Path(sys.prefix, "bin", "micromamba")
     if micromamba_path.is_file():
         return micromamba_path
-    url = f"https://anaconda.org/conda-forge/micromamba/1.5.1/download/{_platform()}/micromamba-1.5.1-0.tar.bz2"
+    url = f"https://conda.anaconda.org/conda-forge/{_platform()}/micromamba-1.5.1-0.tar.bz2"
     tarball, _ = urlretrieve(url)
     with tarfile.open(tarball, "r:bz2") as tf:
         tf.extract("bin/micromamba", path=sys.prefix)
