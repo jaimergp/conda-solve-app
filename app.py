@@ -33,9 +33,9 @@ STATEFUL_KEYS = ("platform", "channels", "packages", "priority", "glibc", "cuda"
 DEFAULT_STATE = {
     "platform": "linux-64",
     "priority": "strict",
-    "glibc": "2.12",
-    "cuda": "11",
-    "osx": "10.9",
+    "glibc": "2.17",
+    "cuda": "12.0",
+    "osx": "11.0",
 }
 
 st.set_page_config(
