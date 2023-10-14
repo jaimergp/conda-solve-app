@@ -5,7 +5,10 @@ import json
 import os
 import re
 import sys
+import tarfile
+from pathlib import Path
 from subprocess import run, TimeoutExpired
+from urllib.request import urlretrieve
 
 import streamlit as st
 
@@ -24,11 +27,38 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+def _platform():
+    operating_system = {
+        "linux": "linux",
+        "linux2": "linux",
+        "darwin": "osx",
+    }[sys.platform]
+    arch = {
+        "x86_64": "64",
+        "aarch64": "aarch64",
+        "ppc64le": "ppc64le",
+        "arm64": "arm64",
+    }[os.uname().machine]
+    return f"{operating_system}-{arch}"
+
+
+@st.cache_resource
+def micromamba():
+    micromamba_path = Path(sys.prefix, "bin", "micromamba")
+    if micromamba_path.is_file():
+        return micromamba_path
+    url = f"https://anaconda.org/conda-forge/micromamba/1.5.1/download/{_platform()}/micromamba-1.5.1-0.tar.bz2"
+    tarball, _ = urlretrieve(url)
+    with tarfile.open(tarball, "r:bz2") as tf:
+        tf.extract("bin/micromamba", path=sys.prefix)
+    os.chmod(str(micromamba_path), 0o755)
+    return micromamba_path
+
 
 @st.cache_data(ttl=TTL)
 def refresh_repodata(channels, platform):
     cmd = [
-        "micromamba",
+        micromamba(),
         "create",
         "--dry-run",
         "--name",
@@ -46,8 +76,6 @@ def refresh_repodata(channels, platform):
     p = run(cmd, capture_output=True, text=True, timeout=REPODATA_TIMEOUT)
     if p.returncode != 0:
         st.warning(f"Failed to refresh repodata! {p.stderr}")
-    print(p.stdout)
-    print(p.stderr, file=sys.stderr)
 
 
 @st.cache_data(ttl=TTL)
@@ -60,7 +88,7 @@ def solve(
 ):
     refresh_repodata(sorted(channels), platform)
     cmd = [
-        "micromamba",
+        micromamba(),
         "create",
         "--dry-run",
         "--json",
@@ -248,6 +276,7 @@ if ok or (packages and channels and platform):
         )
         st.stop()
     except Exception as e:
+        raise
         st.error(f"Unknown error! {e.__class__.__name__}: {e}")
         st.stop()
 
