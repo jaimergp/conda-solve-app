@@ -27,6 +27,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+
 def _platform():
     operating_system = {
         "linux": "linux",
@@ -179,7 +180,12 @@ def result_table(packages, specs):
 
 
 def lockfile(packages, platform):
-    lines = [f"# subdir: {platform}", "@EXPLICIT"]
+    lines = [
+        "# This file may be used to create an environment using:",
+        "# $ conda create --name <env> --file <this file>",
+        f"# platform: {platform}",
+        "@EXPLICIT",
+    ]
     for pkg in packages:
         lines.append(f"{pkg['url']}#{pkg['md5']}")
     return "\n".join(lines)
@@ -280,7 +286,6 @@ if ok or (packages and channels and platform):
         )
         st.stop()
     except Exception as e:
-        raise
         st.error(f"Unknown error! {e.__class__.__name__}: {e}")
         st.stop()
 
