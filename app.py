@@ -244,20 +244,20 @@ def validate_package(line):
     if len(line) > MAX_CHARS_PER_LINE:
         raise ValueError("Line too long.")
     if " " in line:
-        raise ValueError(f"Spaces not allowed in package specifications: `{line}`")
+        raise ValueError(f"Spaces not allowed in package spec: `{line}`")
     if "::" in line and (channel := line.split("::")[0]) not in ALLOWED_CHANNELS:
         raise ValueError(
             f"Specified channel `{channel}` is not allowed. "
             f"Use one of: {', '.join(ALLOWED_CHANNELS)}."
         )
     if line.startswith("-"):
-        raise ValueError(f"Invalid package specification: `{line}`.")
+        raise ValueError(f"Invalid package spec: `{line}`.")
     if line.lower().startswith(("http://", "https://", "file://", "ftp://", "s3://")):
         raise ValueError(f"URLs not allowed: `{line}`.")
     if line.startswith("*"):
         raise ValueError(f"Wildcards not allowed: `{line}`.")
     if not re.match(r"^[a-zA-Z0-9_\-\.\*=!><,|;\[\]/]+$", line):
-        raise ValueError(f"Invalid characters in package specification: `{line}`.")
+        raise ValueError(f"Invalid characters in package spec: `{line}`.")
     return line
 
 
@@ -266,10 +266,14 @@ def validate_packages(packages):
         raise ValueError(
             f"Too many packages requested. Maximum is {MAX_LINES_PER_REQUEST}. "
         )
+    pkgs = []
     for pkg in packages:
         pkg = validate_package(pkg)
         if pkg:
-            yield pkg
+            pkgs.append(pkg)
+    if not pkgs:
+        raise ValueError("No valid packages specified.")
+    return pkgs
 
 
 def parse_url_params():
@@ -376,11 +380,15 @@ with st.sidebar:
         elif platform.startswith("win-"):
             virtual_packages["win"] = st.text_input("`__win`", "1", disabled=True)
 
-    specs = list(validate_packages(packages.splitlines()))
-    enabled = all([platform, channels, specs])
+    enabled = all([platform, channels, packages.strip()])
     ok = st.sidebar.button("Run solve", disabled=not enabled)
 
 if ok or enabled:
+    try:
+        specs = validate_packages(packages.splitlines())
+    except ValueError as e:
+        st.error(e)
+        st.stop()
     st.experimental_set_query_params(
         platform=platform,
         channels=",".join(channels),
@@ -396,9 +404,6 @@ if ok or enabled:
             priority=priority,
             virtual_packages=virtual_packages,
         )
-    except ValueError as e:
-        st.error(e)
-        st.stop()
     except TimeoutExpired:
         st.error(
             "Solver timed out. Try again with a simpler request "
