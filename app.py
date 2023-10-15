@@ -64,17 +64,16 @@ def _platform():
 
 @st.cache_resource
 def micromamba():
-    micromamba_path = Path(__file__).parent / "micromamba"
+    workdir = Path(__file__).parent
+    micromamba_path = workdir / "micromamba"
     if micromamba_path.is_file():
         return micromamba_path
-    url = f"https://conda.anaconda.org/conda-forge/{_platform()}/micromamba-1.5.1-0.tar.bz2"
-    tarball, _ = urlretrieve(url)
-    with tarfile.open(tarball, "r:bz2") as tf:
-        for item in tf:
-            if item.name == "bin/micromamba":
-                item.name = "micromamba"
-                tf.extract(item, path=Path(__file__).parent)
-                break
+    version = "1.5.1-0"
+    url = (
+        "https://github.com/mamba-org/micromamba-releases/releases/download/"
+        f"{version}/micromamba-{_platform()}"
+    )
+    urlretrieve(url, micromamba_path)
     os.chmod(str(micromamba_path), 0o755)
     return micromamba_path
 
