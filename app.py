@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import tarfile
+import time
 from pathlib import Path
 from subprocess import run, TimeoutExpired
 from urllib.request import urlretrieve
@@ -131,10 +132,11 @@ def solve(
     for k, v in (virtual_packages or {}).items():
         if v:
             env["CONDA_OVERRIDE_" + k.upper()] = v
-
+    t0 = time.time()
     p = run(
         [*cmd, "--json"], capture_output=True, text=True, timeout=SOLVE_TIMEOUT, env=env
     )
+    time_taken = time.time() - t0
     try:
         result = json.loads(p.stdout)
     except json.JSONDecodeError:
@@ -145,7 +147,9 @@ def solve(
             "returncode": p.returncode,
             "cmd": cmd,
             "virtual_packages": virtual_packages or {},
+            "stats": {"time_taken": time_taken},
         }
+    result["stats"] = {"time_taken": time_taken}
     if result.get("solver_problems"):
         # augment with explained problems, not available in JSON output :shrug:
         p = run(
@@ -421,6 +425,7 @@ if ok or enabled:
         st.error("Unknown error. Check the full JSON result below.")
     with st.expander("Full JSON result"):
         st.code(json.dumps(result, indent=2), language="json")
+    st.markdown(f"> ⌛️ _Solver took {result['stats']['time_taken']:.3f} seconds_.")
 elif initialization_error:
     st.info("There were errors initializing the app. Check your URL.")
 else:
