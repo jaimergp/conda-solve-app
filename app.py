@@ -362,6 +362,10 @@ with st.sidebar:
             "Channel priority", ALLOWED_PRIORITIES, key="priority"
         )
         virtual_packages = {}
+        if platform.startswith(("linux-", "win-")):
+            virtual_packages["cuda"] = st.text_input(
+                "`__cuda`", DEFAULT_STATE["cuda"], max_chars=10, key="cuda"
+            )
         if platform.startswith("linux-"):
             virtual_packages["linux"] = st.text_input("`__linux`", "1", disabled=True)
             virtual_packages["glibc"] = st.text_input(
@@ -371,10 +375,6 @@ with st.sidebar:
             virtual_packages["osx"] = st.text_input("`__osx`", DEFAULT_STATE["osx"], max_chars=10, key="osx")
         elif platform.startswith("win-"):
             virtual_packages["win"] = st.text_input("`__win`", "1", disabled=True)
-        elif platform.startswith(("linux-", "win-")):
-            virtual_packages["cuda"] = st.text_input(
-                "`__cuda`", DEFAULT_STATE["cuda"], max_chars=10, key="cuda"
-            )
 
     specs = list(validate_packages(packages.splitlines()))
     enabled = all([platform, channels, specs])
